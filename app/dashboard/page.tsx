@@ -25,6 +25,11 @@ type Scholarship = {
   docs: string[];
 };
 
+type SearchItem = {
+  title: string;
+  link: string;
+};
+
 const MOCK: Scholarship[] = [
   {
     name: "Women in STEM Leadership Scholarship",
@@ -62,12 +67,58 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [selected, setSelected] = useState<Scholarship>(MOCK[0]);
 
+  // Hour 2: live links
+  const [liveLinks, setLiveLinks] = useState<SearchItem[]>([]);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
+
   useEffect(() => {
     const raw = sessionStorage.getItem("scholarscout_profile");
     if (raw) setProfile(JSON.parse(raw));
+
+    const cached = sessionStorage.getItem("scholarscout_links");
+    if (cached) setLiveLinks(JSON.parse(cached));
   }, []);
 
   const sorted = useMemo(() => [...MOCK].sort((a, b) => b.score - a.score), []);
+
+  async function runLiveSearch() {
+    setLiveLoading(true);
+    setLiveError(null);
+
+    // Build an explainable query from the profile (safe + simple)
+    const program = profile?.program?.trim() || "computer science";
+    const country = profile?.country?.trim() || "Canada";
+    const year = "2026";
+    const keywords = profile?.interests?.trim();
+    const q = keywords
+      ? `scholarship ${program} ${country} ${year} ${keywords}`
+      : `scholarship ${program} ${country} ${year}`;
+
+    try {
+      const res = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q, num: 8 }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        // Surface useful debug text (your API route returns detail)
+        const detail = data?.detail ? ` • ${String(data.detail).slice(0, 250)}` : "";
+        throw new Error((data?.error || "Search failed") + detail);
+      }
+
+      const items: SearchItem[] = data.items || [];
+      setLiveLinks(items);
+      sessionStorage.setItem("scholarscout_links", JSON.stringify(items));
+    } catch (err: any) {
+      setLiveError(err?.message || "Search failed");
+    } finally {
+      setLiveLoading(false);
+    }
+  }
 
   return (
     <main className="min-h-screen bg-[#F7F6F2] text-[#0B1220]">
@@ -89,24 +140,81 @@ export default function DashboardPage() {
             <p className="mt-2 text-[#0B1220]/70">
               {profile ? (
                 <>
-                  <span className="font-semibold text-[#0B1220]">
-                    {profile.program}
-                  </span>{" "}
+                  <span className="font-semibold text-[#0B1220]">{profile.program}</span>{" "}
                   • {profile.country} • GPA {profile.gpaRange}
                 </>
               ) : (
                 "Loading profile…"
               )}
             </p>
+
+            {/* Hour 2 trigger */}
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                onClick={runLiveSearch}
+                className="rounded-2xl bg-[#0A214A] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0A214A]/90 active:translate-y-[1px]"
+              >
+                {liveLoading ? "Searching…" : "Find live scholarships"}
+              </button>
+
+              <p className="text-xs text-[#0B1220]/60">
+                Searches only your verified sources list (gov + universities).
+              </p>
+            </div>
           </div>
 
           <div className="rounded-3xl border border-[#0A214A]/15 bg-white/75 px-4 py-3 shadow-sm">
             <p className="text-xs text-[#0B1220]/60">Top match score</p>
-            <p className="mt-1 text-2xl font-semibold text-[#0A214A]">
-              {sorted[0].score}
-            </p>
+            <p className="mt-1 text-2xl font-semibold text-[#0A214A]">{sorted[0].score}</p>
           </div>
         </header>
+
+        {/* Hour 2: Live links output */}
+        <section className="mt-8">
+          <div className="rounded-3xl border border-[#0A214A]/15 bg-white/75 p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold text-[#0A214A]">Live scholarship links</p>
+                <p className="mt-1 text-xs text-[#0B1220]/60">
+                  {liveLinks.length
+                    ? `Pulled ${liveLinks.length} verified links.`
+                    : "Run search to populate results from your verified sources list."}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl border border-[#0A214A]/15 bg-white px-3 py-2 text-xs text-[#0B1220]/70">
+                  Format: <span className="font-semibold text-[#0B1220]">[{`{ title, link }`}]</span>
+                </div>
+              </div>
+            </div>
+
+            {liveError && (
+              <p className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {liveError}
+              </p>
+            )}
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {liveLinks.map((x) => (
+                <div
+                  key={x.link}
+                  className="rounded-2xl border border-[#0A214A]/12 bg-white p-4 shadow-sm"
+                >
+                  <p className="text-sm font-semibold text-[#0B1220] line-clamp-2">{x.title}</p>
+                  <a
+                    href={x.link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 block break-all text-xs text-[#0A214A] underline"
+                  >
+                    {x.link}
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
 
         {/* Horizontal results rail */}
         <section className="mt-8">
@@ -130,9 +238,7 @@ export default function DashboardPage() {
                   <div>
                     <p className="font-semibold text-[#0B1220]">{s.name}</p>
                     <p className="mt-1 text-sm text-[#0A214A]">{s.amount}</p>
-                    <p className="mt-2 text-xs text-[#0B1220]/65">
-                      Deadline: {s.deadline}
-                    </p>
+                    <p className="mt-2 text-xs text-[#0B1220]/65">Deadline: {s.deadline}</p>
                     <p className="mt-1 text-xs text-[#0B1220]/55">{s.source}</p>
                   </div>
                   <ScoreBadge score={s.score} />
@@ -197,15 +303,11 @@ export default function DashboardPage() {
 
           <aside className="rounded-3xl border border-[#0A214A]/15 bg-white/75 p-5 shadow-sm">
             <p className="text-xs text-[#0B1220]/60">Inspector</p>
-            <h2 className="mt-2 text-lg font-semibold text-[#0A214A]">
-              {selected.name}
-            </h2>
+            <h2 className="mt-2 text-lg font-semibold text-[#0A214A]">{selected.name}</h2>
 
             <div className="mt-4 rounded-2xl border border-[#0A214A]/15 bg-white p-4 shadow-sm">
               <p className="text-xs text-[#0B1220]/60">Match score</p>
-              <p className="mt-1 text-4xl font-semibold text-[#0A214A]">
-                {selected.score}
-              </p>
+              <p className="mt-1 text-4xl font-semibold text-[#0A214A]">{selected.score}</p>
               <p className="mt-2 text-xs text-[#0B1220]/65">
                 Based on program, location, GPA band, and keyword alignment.
               </p>

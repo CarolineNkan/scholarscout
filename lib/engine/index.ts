@@ -1,0 +1,1 @@
+export { scoreScholarship } from "./scoring";
