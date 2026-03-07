@@ -29,12 +29,13 @@ export type ScholarshipRecord = {
     essays: string[];
   };
   rawTextSnippet?: string;
+  status?: "open" | "closed" | "unknown";
 };
 
 export type MatchResult = {
   scholarship: ScholarshipRecord;
-  score: number;      // 0–100
-  why: string[];      // reasons
-  gaps: string[];     // missing items / risks
-  docs: string[];     // required docs
+  score: number;
+  why: string[];
+  gaps: string[];
+  docs: string[];
 };

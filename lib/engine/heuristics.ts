@@ -36,10 +36,30 @@ function pickFirstMatch(text: string, patterns: RegExp[]) {
 }
 
 function extractAmount(text: string) {
-  return pickFirstMatch(text, [
-    /\$\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})?\s?(?:CAD|USD|EUR|GBP)?/i,
-    /\b\d{1,3}(?:,\d{3})*\s?(?:CAD|USD|EUR|GBP)\b/i,
-  ]);
+  const patterns = [
+    /\$\s?\d[\d,]*(?:\.\d{2})?\s?(?:CAD|USD|EUR|GBP)?/gi,
+    /\b\d[\d,]*(?:\.\d{2})?\s?(?:CAD|USD|EUR|GBP)\b/gi,
+  ];
+
+  for (const pattern of patterns) {
+    const matches = text.match(pattern);
+    if (!matches?.length) continue;
+
+    for (const raw of matches) {
+      const cleaned = raw.trim();
+
+      // Ignore obviously tiny false positives like "$1" unless that's all there is
+      const digitsOnly = cleaned.replace(/[^\d]/g, "");
+      if (digitsOnly.length >= 4) {
+        return cleaned;
+      }
+    }
+
+    // fallback to first match if nothing had 4+ digits
+    return matches[0].trim();
+  }
+
+  return undefined;
 }
 
 function extractDeadline(text: string) {
